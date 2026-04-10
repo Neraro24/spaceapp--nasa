@@ -1,239 +1,244 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>NASA Space System</title>
+  <title>Lunar FPS System</title>
 
   <style>
-    body { margin:0; overflow:hidden; font-family:Arial; background:black; }
+    body { margin:0; overflow:hidden; background:black; font-family:Arial; }
 
-    #ui { position:absolute; top:0; left:0; width:100%; height:100%; }
+    #ui {
+      position:absolute;
+      top:0; left:0;
+      color:white;
+      width:100%;
+      pointer-events:none;
+    }
 
-    #title {
+    #title{
       position:absolute;
       top:10px;
       width:100%;
       text-align:center;
-      color:white;
-      font-size:26px;
+      font-size:24px;
     }
 
-    #panel {
+    #panel{
       position:absolute;
       left:20px;
       top:20px;
-      background:rgba(0,0,0,0.85);
-      padding:15px;
-      color:white;
-      width:260px;
-      border-radius:12px;
+      width:280px;
+      background:rgba(0,0,0,0.7);
+      padding:12px;
+      border-radius:10px;
     }
 
-    #ai {
+    #crosshair{
+      position:absolute;
+      top:50%;
+      left:50%;
+      width:6px;
+      height:6px;
+      background:white;
+      transform:translate(-50%,-50%);
+      border-radius:50%;
+    }
+
+    #hint{
       position:absolute;
       bottom:20px;
-      left:20px;
-      width:260px;
-      background:rgba(0,0,0,0.85);
-      padding:10px;
-      color:white;
-      border-radius:10px;
+      width:100%;
+      text-align:center;
+      font-size:14px;
+      opacity:0.7;
     }
-
-    #menu {
-      position:absolute;
-      top:20px;
-      right:20px;
-      color:white;
-    }
-
-    #dropdown {
-      display:none;
-      background:rgba(0,0,0,0.85);
-      padding:10px;
-      border-radius:10px;
-    }
-
-    .hidden { display:none; }
   </style>
 </head>
 
 <body>
 
-<div id="title">🚀 NASA Space Mission System</div>
+<div id="ui">
+  <div id="title">🌕 Lunar FPS Base</div>
 
-<div id="panel">
-  <h3>Mission Data</h3>
-  <p id="info">Click objects</p>
-  <p id="temp">Temp: --</p>
-  <p id="mode">Mode: Earth</p>
-</div>
-
-<div id="ai">
-  🤖 AI Assistant
-  <div id="chat"></div>
-  <input placeholder="Ask..." onkeydown="askAI(event)" style="width:100%">
-</div>
-
-<div id="menu">
-  <button onclick="toggleMenu()">☰ Menu</button>
-  <div id="dropdown">
-    <p onclick="selectLayer('flood')">Flood</p>
-    <p onclick="selectLayer('heat')">Heat</p>
-    <p onclick="selectLayer('quake')">Quake</p>
-    <p onclick="enterMoon()">🌕 Enter Moon</p>
+  <div id="panel">
+    <div id="info">Mode: Earth</div>
+    <div id="ship">Ship: None</div>
+    <div id="mission">Mission: --</div>
   </div>
+
+  <div id="crosshair"></div>
+  <div id="hint">WASD move | Mouse look | Click ships</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script>
-// ================= SYSTEM STATE =================
-let mode = "earth";
-
-// ================= SCENE =================
+// ================= BASIC SETUP =================
 const scene = new THREE.Scene();
+
 const camera = new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
-camera.position.z = 3;
+camera.position.set(0,1.2,3);
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth,innerHeight);
 document.body.appendChild(renderer.domElement);
 
 // LIGHT
-const light = new THREE.PointLight(0xffffff,2);
-light.position.set(5,3,5);
+const light = new THREE.DirectionalLight(0xffffff,1.5);
+light.position.set(5,10,5);
 scene.add(light);
 
-// ================= EARTH =================
+// ================= STARS + DUST =================
+function addParticles(count, size, spread, color){
+  const geo = new THREE.BufferGeometry();
+  const arr=[];
+  for(let i=0;i<count;i++){
+    arr.push((Math.random()-0.5)*spread);
+    arr.push((Math.random()-0.5)*spread);
+    arr.push((Math.random()-0.5)*spread);
+  }
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(arr,3));
+
+  const mat = new THREE.PointsMaterial({size:size,color:color});
+  const p = new THREE.Points(geo,mat);
+  scene.add(p);
+  return p;
+}
+
+// stars far
+addParticles(8000,1,2000,0xffffff);
+
+// dust near moon
+addParticles(3000,0.6,50,0xaaaaaa);
+
+// ================= MOON (REALISTIC SURFACE) =================
 const loader = new THREE.TextureLoader();
 
-const earth = new THREE.Mesh(
-  new THREE.SphereGeometry(1,128,128),
-  new THREE.MeshStandardMaterial({
-    map: loader.load("https://threejs.org/examples/textures/land_ocean_ice_cloud_2048.jpg")
-  })
-);
-scene.add(earth);
-
-// CLOUDS
-const clouds = new THREE.Mesh(
-  new THREE.SphereGeometry(1.01,128,128),
-  new THREE.MeshStandardMaterial({
-    map: loader.load("https://threejs.org/examples/textures/planets/earth_clouds_1024.png"),
-    transparent:true
-  })
-);
-scene.add(clouds);
-
-// ================= CLIMATE LAYERS =================
-const flood = new THREE.Mesh(new THREE.SphereGeometry(1.02,128,128),
-  new THREE.MeshBasicMaterial({color:0x00aaff,transparent:true,opacity:0.18,blending:THREE.AdditiveBlending})
-);
-const heat = new THREE.Mesh(new THREE.SphereGeometry(1.02,128,128),
-  new THREE.MeshBasicMaterial({color:0xff3300,transparent:true,opacity:0.18,blending:THREE.AdditiveBlending})
-);
-const quake = new THREE.Mesh(new THREE.SphereGeometry(1.02,128,128),
-  new THREE.MeshBasicMaterial({color:0xc49a6c,transparent:true,opacity:0.18,blending:THREE.AdditiveBlending})
-);
-
-scene.add(flood,heat,quake);
-flood.visible=heat.visible=quake.visible=false;
-
-// ================= MOON =================
 const moon = new THREE.Mesh(
-  new THREE.SphereGeometry(0.3,64,64),
-  new THREE.MeshStandardMaterial({color:0x999999})
+  new THREE.SphereGeometry(5,128,128),
+  new THREE.MeshStandardMaterial({
+    map: loader.load("https://threejs.org/examples/textures/planets/moon_1024.jpg"),
+    roughness:1,
+    metalness:0
+  })
 );
-moon.position.x = 3;
+moon.position.set(0,0,0);
 scene.add(moon);
 
-// ================= RAYCAST =================
+// ================= SHIPS =================
+
+// 🛰 Apollo
+const apollo = new THREE.Mesh(
+  new THREE.BoxGeometry(0.6,0.6,0.6),
+  new THREE.MeshStandardMaterial({color:0x999999})
+);
+apollo.position.set(1.5,0.5,1);
+scene.add(apollo);
+
+// 🛸 Shuttle
+const shuttle = new THREE.Mesh(
+  new THREE.ConeGeometry(0.4,1,8),
+  new THREE.MeshStandardMaterial({color:0x00aaff})
+);
+shuttle.position.set(-1.5,0.5,0);
+scene.add(shuttle);
+
+// 👽 Orion
+const orion = new THREE.Mesh(
+  new THREE.SphereGeometry(0.5,16,16),
+  new THREE.MeshStandardMaterial({color:0xff3300})
+);
+orion.position.set(0,0.5,-2);
+scene.add(orion);
+
+// ================= FPS CONTROLS =================
+let velocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
+
+let move = {w:false,a:false,s:false,d:false};
+
+document.addEventListener("keydown",(e)=>{
+  if(e.key==="w") move.w=true;
+  if(e.key==="a") move.a=true;
+  if(e.key==="s") move.s=true;
+  if(e.key==="d") move.d=true;
+});
+
+document.addEventListener("keyup",(e)=>{
+  if(e.key==="w") move.w=false;
+  if(e.key==="a") move.a=false;
+  if(e.key==="s") move.s=false;
+  if(e.key==="d") move.d=false;
+});
+
+// mouse look
+let yaw=0,pitch=0;
+
+document.addEventListener("mousemove",(e)=>{
+  yaw -= e.movementX*0.002;
+  pitch -= e.movementY*0.002;
+  pitch = Math.max(-1.5,Math.min(1.5,pitch));
+});
+
+// ================= CLICK INTERACTION =================
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
-window.addEventListener("mousemove",(e)=>{
+document.addEventListener("click",()=>{
+  raycaster.setFromCamera(mouse,camera);
+  const hits = raycaster.intersectObjects([apollo,shuttle,orion]);
+
+  if(hits.length>0){
+    const obj = hits[0].object;
+
+    if(obj===apollo){
+      document.getElementById("ship").innerText="Ship: Apollo (Exploration)";
+      document.getElementById("mission").innerText="Take Earth photos + learn modules";
+    }
+
+    if(obj===shuttle){
+      document.getElementById("ship").innerText="Ship: Space Shuttle (Multiplayer)";
+      document.getElementById("mission").innerText="Room Code: 48291 | Find Imposter";
+    }
+
+    if(obj===orion){
+      document.getElementById("ship").innerText="Ship: Orion (Alien Mission)";
+      document.getElementById("mission").innerText="Find Kill Code: ███-42-X";
+    }
+  }
+});
+
+document.addEventListener("mousemove",(e)=>{
   mouse.x = (e.clientX/innerWidth)*2-1;
   mouse.y = -(e.clientY/innerHeight)*2+1;
 });
 
-window.addEventListener("click",()=>{
-  raycaster.setFromCamera(mouse,camera);
-  const hit = raycaster.intersectObjects([earth,moon]);
+// ================= FPS UPDATE =================
+function updateFPS(){
+  direction.z = Number(move.w) - Number(move.s);
+  direction.x = Number(move.d) - Number(move.a);
 
-  if(hit.length>0){
-    if(hit[0].object===earth){
-      showEarthData();
-    }
-    if(hit[0].object===moon){
-      enterMoon();
-    }
-  }
-});
+  const speed = 0.05;
 
-// ================= EARTH DATA =================
-function showEarthData(){
-  document.getElementById("info").innerText="Earth Region Scanned";
-  document.getElementById("temp").innerText="Temp: "+(20+Math.random()*20).toFixed(1)+"°C";
+  camera.position.x += (Math.sin(yaw)*direction.z + Math.cos(yaw)*direction.x)*speed;
+  camera.position.z += (Math.cos(yaw)*direction.z - Math.sin(yaw)*direction.x)*speed;
+
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
 }
 
-// ================= MENU =================
-function toggleMenu(){
-  const d=document.getElementById("dropdown");
-  d.style.display=d.style.display==="block"?"none":"block";
+// ================= UI =================
+function updateUI(){
+  document.getElementById("info").innerText="Mode: Moon Surface FPS";
 }
 
-function selectLayer(type){
-  flood.visible=heat.visible=quake.visible=false;
-  if(type==="flood") flood.visible=true;
-  if(type==="heat") heat.visible=true;
-  if(type==="quake") quake.visible=true;
-}
-
-// ================= MOON MODE =================
-function enterMoon(){
-  mode="moon";
-  document.getElementById("mode").innerText="Mode: Moon";
-
-  camera.position.set(0,0,2);
-
-  showMoonBaseMenu();
-}
-
-// ================= MOON BASE =================
-function showMoonBaseMenu(){
-  document.getElementById("info").innerText=
-  "Moon Base: Apollo | Shuttle | Orion";
-}
-
-// ================= AI =================
-function askAI(e){
-  if(e.key==="Enter"){
-    const input=e.target.value;
-    const chat=document.getElementById("chat");
-
-    let reply="NASA AI: I can guide missions.";
-
-    if(input.includes("moon")) reply="Moon has 3 ships: Apollo, Shuttle, Orion.";
-    if(input.includes("earth")) reply="Earth has climate layers and real-time data.";
-
-    chat.innerHTML+="<p>🧑 "+input+"</p><p>🤖 "+reply+"</p>";
-
-    e.target.value="";
-  }
-}
-
-// ================= ANIMATE =================
+// ================= LOOP =================
 function animate(){
   requestAnimationFrame(animate);
 
-  earth.rotation.y+=0.002;
-  clouds.rotation.y+=0.0025;
-  moon.rotation.y+=0.001;
+  updateFPS();
+  updateUI();
 
-  const t=Date.now()*0.002;
-  flood.material.opacity=0.15+Math.sin(t)*0.03;
-  heat.material.opacity=0.15+Math.sin(t)*0.03;
-  quake.material.opacity=0.15+Math.sin(t)*0.03;
+  moon.rotation.y += 0.0005;
 
   renderer.render(scene,camera);
 }
